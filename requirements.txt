@@ -1,0 +1,25 @@
+# Core Deep Learning and NLP Framework
+torch>=2.0.0          # Deep learning framework
+transformers>=4.30.0  # Hugging Face transformers library
+tokenizers>=0.13.0    # Fast tokenizers for transformers
+
+# Core NLP Utilities
+nltk>=3.8             # Traditional NLP tools and lexical utilities
+numpy>=1.21.0         # Numerical computing foundation
+
+# Development and Code Quality
+tqdm>=4.64.0          # Progress bars for long-running processes
+
+# Installation Notes:
+# - For GPU support: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# - For spaCy models: python -m spacy download en_core_web_sm
+# - Python >= 3.8 recommended
+
+# Additional dependencies will be added as exercises are implemented:
+# - spacy (for NER/POS exercises)
+# - pandas (for data manipulation exercises) 
+# - scikit-learn (for traditional ML exercises)
+# - sentence-transformers (for sentence embedding exercises)
+# - faiss-cpu (for retrieval exercises)
+# - matplotlib/seaborn (for visualization exercises)
+# - datasets/evaluate (for evaluation exercises)

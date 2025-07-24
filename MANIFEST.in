@@ -1,0 +1,14 @@
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+include requirements.txt
+include requirements-dev.txt
+include .pre-commit-config.yaml
+
+recursive-include */README.md
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.orig
+recursive-exclude * *.rej
+recursive-exclude * .git*
+recursive-exclude * .DS_Store

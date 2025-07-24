@@ -1,0 +1,14 @@
+# Essential Development Dependencies
+pytest>=7.4.0         # Testing framework
+black>=23.7.0          # Code formatter
+isort>=5.12.0          # Import sorting
+flake8>=6.0.0          # Linting and style checking
+
+# Pre-commit Hooks
+pre-commit>=3.3.0      # Git pre-commit hooks
+
+# Optional: Additional tools (install as needed)
+# pytest-cov>=4.1.0     # Coverage reporting (when you have substantial tests)
+# mypy>=1.5.0           # Static type checking (for production-ready code)
+# jupyter>=1.0.0        # Jupyter support (if creating notebook examples)
+# sphinx>=7.1.0         # Documentation generation (for extensive docs)
