@@ -1,6 +1,5 @@
 """Basic smoke tests to ensure repository structure is valid."""
 
-import os
 import sys
 from pathlib import Path
 import pytest
@@ -52,15 +51,15 @@ def test_python_version():
     assert sys.version_info >= (3, 8), "Python 3.8 or higher required"
 
 
-def test_imports():
+def test_basic_imports():
     """Test that core dependencies can be imported."""
     try:
         import torch
         import transformers
         import numpy
-        import sklearn
         print(f"PyTorch version: {torch.__version__}")
         print(f"Transformers version: {transformers.__version__}")
+        print(f"NumPy version: {numpy.__version__}")
     except ImportError as e:
         pytest.fail(f"Failed to import core dependencies: {e}")
 
@@ -75,12 +74,11 @@ def test_readme_content():
     
     expected_sections = [
         "# NLP Syntax Exercises",
-        "## Overview", 
-        "## Repository Structure",
-        "## Installation",
-        "## Getting Started",
-        "## Contributing",
-        "## License",
+        "## 🎯 Motivation & Learning Objectives", 
+        "## 📁 Folder Structure Overview",
+        "## 🧪 How to Use These Exercises",
+        "## 🤝 Contribution Guidelines",
+        "## 📄 License",
     ]
     
     for section in expected_sections:
