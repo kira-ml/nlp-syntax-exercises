@@ -179,3 +179,7 @@ Thumbs.db
 *.tmp
 *.temp
 .tmp/
+
+# Prevent empty __init__.py files
+__init__.py
+*/__init__.py
