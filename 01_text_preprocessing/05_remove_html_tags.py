@@ -50,6 +50,7 @@ def remove_html_with_parser(text):
 
 
 
+
 def compare_methods():
 
     html_text = get_sample_html()
