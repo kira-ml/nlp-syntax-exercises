@@ -183,3 +183,8 @@ Thumbs.db
 # Prevent empty __init__.py files
 __init__.py
 */__init__.py
+
+# Prevent specific removed files from being re-tracked
+01_text_preprocessing/normalize_to_lowercase.py
+01_text_preprocessing/remove_urls_regex.py
+01_text_preprocessing/tokenize_social_post.py
