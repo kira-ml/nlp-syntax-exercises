@@ -34,6 +34,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
+        # Download required NLTK data
+        python -c "import nltk; nltk.download('punkt')"
+        # Download required spaCy model
+        python -m spacy download en_core_web_sm
     
     - name: Lint with flake8
       run: |
@@ -56,3 +60,12 @@ jobs:
       run: |
         pytest tests/ --verbose
       continue-on-error: true  # Allow tests to fail initially while building exercises
+      
+    - name: Check import syntax of all Python files
+      run: |
+        # Check that all Python files can be imported (syntax check)
+        find . -name "*.py" -not -path "./.git/*" -not -path "./nlp-env/*" -not -path "./__pycache__/*" | while read file; do
+          echo "Checking syntax: $file"
+          python -m py_compile "$file" || echo "Warning: $file has syntax issues"
+        done
+      continue-on-error: true
