@@ -1,137 +1,231 @@
-#!/usr/bin/env python3
-"""
-Filter out lines matching unwanted patterns using regex rules.
-Usage: python 15_regex_filter_bad_lines.py input_file.txt output_file.txt
-"""
-
 import re
-import sys
-import argparse
-from typing import List, Pattern
+import logging
+from typing import List, Set, Pattern, Optional, Iterator, Union
+from pathlib import Path
+import json
 
-def load_default_patterns() -> List[str]:
-    """Load default regex patterns for filtering."""
-    return [
-        r'\b(fuck|shit|damn|hell)\b',           # Basic profanity
-        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email addresses
-        r'\{\{.*?\}\}',                         # Template variables {{variable}}
-        r'<.*?>',                               # HTML tags
-        r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',  # URLs
-        r'\$\{.*?\}',                           # Shell-style variables ${variable}
-        r'__.*?__',                             # Double underscore patterns
-    ]
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def compile_patterns(patterns: List[str]) -> List[Pattern]:
-    """Compile regex patterns for better performance."""
-    compiled = []
-    for pattern in patterns:
+class RegexLineFilter:
+    """
+    A robust regex-based line filter for removing unwanted content from text files.
+    
+    Features:
+    - Precompiled regex patterns for performance
+    - Configurable pattern loading from files or dictionaries
+    - Support for both inclusion and exclusion patterns
+    - Performance optimizations for large files
+    - Comprehensive error handling
+    """
+    
+    def __init__(self, 
+                 exclude_patterns: Optional[List[str]] = None,
+                 include_patterns: Optional[List[str]] = None,
+                 case_sensitive: bool = False):
+        """
+        Initialize the filter with regex patterns.
+        
+        Args:
+            exclude_patterns: List of regex patterns to exclude
+            include_patterns: List of regex patterns to require (whitelist)
+            case_sensitive: Whether pattern matching should be case-sensitive
+        """
+        self.case_sensitive = case_sensitive
+        self.flags = 0 if case_sensitive else re.IGNORECASE
+        
+        # Precompile patterns for performance
+        self.exclude_regexes: List[Pattern] = [
+            re.compile(pattern, self.flags) 
+            for pattern in (exclude_patterns or [])
+        ]
+        
+        self.include_regexes: List[Pattern] = [
+            re.compile(pattern, self.flags) 
+            for pattern in (include_patterns or [])
+        ]
+        
+        logger.info(f"Initialized filter with {len(self.exclude_regexes)} exclude "
+                   f"and {len(self.include_regexes)} include patterns")
+    
+    @classmethod
+    def from_config_file(cls, config_path: Union[str, Path]) -> 'RegexLineFilter':
+        """
+        Create filter instance from JSON configuration file.
+        
+        Expected JSON format:
+        {
+            "exclude_patterns": ["pattern1", "pattern2"],
+            "include_patterns": ["pattern3"],
+            "case_sensitive": false
+        }
+        """
+        config_path = Path(config_path)
         try:
-            compiled.append(re.compile(pattern, re.IGNORECASE))
-        except re.error as e:
-            print(f"Warning: Invalid regex pattern '{pattern}': {e}")
-    return compiled
-
-def filter_lines(input_file: str, output_file: str, patterns: List[str], 
-                invert: bool = False, verbose: bool = False) -> None:
-    """
-    Filter lines from input file and write results to output file.
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            return cls(
+                exclude_patterns=config.get('exclude_patterns'),
+                include_patterns=config.get('include_patterns'),
+                case_sensitive=config.get('case_sensitive', False)
+            )
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to load config from {config_path}: {e}")
+            raise
     
-    Args:
-        input_file: Path to input file
-        output_file: Path to output file
-        patterns: List of regex patterns to filter
-        invert: If True, keep only matching lines (opposite behavior)
-        verbose: If True, print filtering statistics
-    """
-    compiled_patterns = compile_patterns(patterns)
+    def should_exclude_line(self, line: str) -> bool:
+        """
+        Determine if a line should be excluded based on patterns.
+        
+        Args:
+            line: Input text line to evaluate
+            
+        Returns:
+            True if line matches any exclude pattern or fails include patterns
+        """
+        # Check exclude patterns first (faster short-circuit)
+        if any(regex.search(line) for regex in self.exclude_regexes):
+            return True
+            
+        # If include patterns exist, line must match at least one
+        if self.include_regexes and not any(
+            regex.search(line) for regex in self.include_regexes
+        ):
+            return True
+            
+        return False
     
-    if verbose:
-        print(f"Loaded {len(compiled_patterns)} filtering patterns")
-    
-    try:
-        with open(input_file, 'r', encoding='utf-8', errors='ignore') as infile:
-            lines = infile.readlines()
-    except FileNotFoundError:
-        print(f"Error: Input file '{input_file}' not found")
-        return
-    except Exception as e:
-        print(f"Error reading input file: {e}")
-        return
-    
-    kept_lines = 0
-    filtered_lines = 0
-    
-    with open(output_file, 'w', encoding='utf-8') as outfile:
+    def filter_lines(self, lines: Iterator[str]) -> Iterator[str]:
+        """
+        Filter lines using configured regex patterns.
+        
+        Args:
+            lines: Iterator of text lines to filter
+            
+        Yields:
+            Lines that pass all filtering criteria
+        """
+        filtered_count = 0
+        total_count = 0
+        
         for line_num, line in enumerate(lines, 1):
-            # Check if line matches any unwanted pattern
-            matched = any(pattern.search(line) for pattern in compiled_patterns)
+            total_count += 1
+            line_content = line.rstrip('\n\r')  # Preserve line endings in output
             
-            # Keep line if it doesn't match (or matches if inverted)
-            should_keep = not matched if not invert else matched
-            
-            if should_keep:
-                outfile.write(line)
-                kept_lines += 1
+            if not self.should_exclude_line(line_content):
+                yield line
             else:
-                filtered_lines += 1
-                if verbose:
-                    print(f"Filtered line {line_num}: {line.strip()}")
+                filtered_count += 1
+                
+                # Log every 1000 filtered lines to avoid log spam
+                if filtered_count % 1000 == 0:
+                    logger.debug(f"Filtered {filtered_count} lines so far (current: {line_num})")
+        
+        logger.info(f"Filtering complete: {filtered_count}/{total_count} lines filtered")
     
-    if verbose:
-        print(f"\nProcessing complete:")
-        print(f"  - Lines kept: {kept_lines}")
-        print(f"  - Lines filtered: {filtered_lines}")
-        print(f"  - Output written to: {output_file}")
+    def filter_file(self, 
+                   input_path: Union[str, Path], 
+                   output_path: Union[str, Path],
+                   encoding: str = 'utf-8') -> int:
+        """
+        Filter lines from input file and write results to output file.
+        
+        Args:
+            input_path: Path to input file
+            output_path: Path to output file
+            encoding: File encoding to use
+            
+        Returns:
+            Number of lines written to output file
+        """
+        input_path = Path(input_path)
+        output_path = Path(output_path)
+        
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+            
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(input_path, 'r', encoding=encoding) as infile, \
+             open(output_path, 'w', encoding=encoding) as outfile:
+            
+            written_count = 0
+            for filtered_line in self.filter_lines(infile):
+                outfile.write(filtered_line)
+                written_count += 1
+                
+        logger.info(f"Wrote {written_count} lines to {output_path}")
+        return written_count
 
+# Example usage and common patterns
+def create_default_filter() -> RegexLineFilter:
+    """Create a filter with common unwanted content patterns."""
+    exclude_patterns = [
+        # Email addresses
+        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+        
+        # URLs
+        r'https?://(?:[-\w.])+(?:[:\d]+)?(?:/(?:[\w/_.])*(?:\?(?:[\w&=%.])*)?(?:#(?:[\w.])*)?)?',
+        
+        # Profanity (example - in practice use comprehensive list)
+        r'\b(fuck|shit|damn)\b',
+        
+        # Template artifacts
+        r'\{\{.*?\}\}',  # Handlebars-style placeholders
+        r'<%.*?%>',      # ERB-style placeholders
+        r'\$\{.*?\}',    # Shell-style placeholders
+        
+        # Common spam patterns
+        r'\b(?:casino|viagra|lottery)\b',
+        
+        # Excessive whitespace
+        r'^\s*$'  # Empty or whitespace-only lines
+    ]
+    
+    return RegexLineFilter(exclude_patterns=exclude_patterns)
+
+# Main execution function
 def main():
-    parser = argparse.ArgumentParser(description="Filter out lines matching unwanted patterns")
-    parser.add_argument("input_file", help="Input file to process")
-    parser.add_argument("output_file", help="Output file for filtered results")
-    parser.add_argument("-p", "--pattern", action="append", dest="patterns",
-                       help="Custom regex pattern to filter (can be used multiple times)")
-    parser.add_argument("-f", "--pattern-file", 
-                       help="File containing regex patterns (one per line)")
-    parser.add_argument("-i", "--invert", action="store_true",
-                       help="Invert matching (keep only matching lines)")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                       help="Show detailed filtering information")
-    parser.add_argument("--no-defaults", action="store_true",
-                       help="Don't use default filtering patterns")
+    """Main execution function demonstrating usage."""
+    import argparse
+    import sys
+    
+    parser = argparse.ArgumentParser(description="Filter unwanted lines from text files")
+    parser.add_argument('input_file', help='Input file path')
+    parser.add_argument('output_file', help='Output file path')
+    parser.add_argument('--config', help='JSON config file with patterns')
+    parser.add_argument('--encoding', default='utf-8', help='File encoding')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     
     args = parser.parse_args()
     
-    # Determine which patterns to use
-    patterns = []
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
     
-    if not args.no_defaults:
-        patterns.extend(load_default_patterns())
-    
-    if args.patterns:
-        patterns.extend(args.patterns)
-    
-    if args.pattern_file:
-        try:
-            with open(args.pattern_file, 'r') as f:
-                file_patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-                patterns.extend(file_patterns)
-        except FileNotFoundError:
-            print(f"Error: Pattern file '{args.pattern_file}' not found")
-            return
-        except Exception as e:
-            print(f"Error reading pattern file: {e}")
-            return
-    
-    if not patterns:
-        print("Warning: No patterns specified for filtering")
-        patterns = [r'^$']  # Default to removing empty lines if nothing else
-    
-    filter_lines(
-        input_file=args.input_file,
-        output_file=args.output_file,
-        patterns=patterns,
-        invert=args.invert,
-        verbose=args.verbose
-    )
+    try:
+        # Initialize filter
+        if args.config:
+            filter_instance = RegexLineFilter.from_config_file(args.config)
+        else:
+            filter_instance = create_default_filter()
+            logger.info("Using default filter patterns")
+        
+        # Process file
+        lines_written = filter_instance.filter_file(
+            args.input_file, 
+            args.output_file, 
+            args.encoding
+        )
+        
+        print(f"Successfully filtered {args.input_file} -> {args.output_file}")
+        print(f"Lines written: {lines_written}")
+        
+    except Exception as e:
+        logger.error(f"Processing failed: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
